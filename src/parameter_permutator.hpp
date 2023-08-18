@@ -23,7 +23,7 @@ typedef std::function<RetType(Args...)> TrainSig;
 typedef std::function<void(ParameterPermutator*)> ProgressCallbackSig;
 
 public:
-	ParameterPermutator(TrainSig const userFunction, std::vector<ParameterRange> const& parameterRange, std::vector<std::string> const& parameterNames = {}):
+	ParameterPermutator(TrainSig const& userFunction, std::vector<ParameterRange> const& parameterRange, std::vector<std::string> const& parameterNames = {}):
 		_userFunction(userFunction),
 		_parameterRanges(parameterRange),
 		_parameterNames(parameterNames)
@@ -35,7 +35,8 @@ public:
 			throw std::runtime_error("Number of parameter names does not match number of arguments");
 		}
 	}
-	ParameterPermutator(TrainSig const userFunction, std::vector<std::pair<std::string, ParameterRange>> nameRangeMap):
+
+	ParameterPermutator(TrainSig const& userFunction, std::vector<std::pair<std::string, ParameterRange>> const& nameRangeMap):
 		_userFunction(userFunction)
 	{
 		if (sizeof...(Args) != nameRangeMap.size()) {
@@ -81,11 +82,19 @@ public:
 		_progressCallback = progressCallback;
 	}
 
-
 	std::string getReport(void) const {
+		size_t ljust = 0;
+		for (size_t i = 0; i < sizeof...(Args); ++i) {
+			ljust = std::max(ljust, _getParameterName(i).size());
+		}
 		std::string s = "[ParameterPermutator report]";
 		for (size_t i = 0; i < sizeof...(Args); ++i) {
-			s += "\n" + _getParameterName(i) + ": n=" + std::to_string(_parameterRanges[i].size());
+			std::string const name = _getParameterName(i);
+			s += "\n" + name;
+			for (int _ = 0; _ < ljust - name.size(); ++_) {
+				s += ".";
+			}
+			s += ": n=" + std::to_string(_parameterRanges[i].size());
 		}
 		s += "\n-----------------------------";
 		s += "\nTotal number of permutations: " + std::to_string(getNumberOfTotalPermutations());
@@ -107,8 +116,15 @@ public:
 	 * @brief Convert a ParameterPack to a string
 	*/
 	std::string to_string(ParameterPack const& pp) const {
-		std::string ret = "{";
+		if (pp.size() == 0) {
+			return "{empty ParameterPack}";
+		}
 		constexpr auto size = sizeof...(Args);
+		if (pp.size() != size) {
+			throw std::runtime_error("to_string | Number of arguments does not match number of elements in ParameterPack");
+		}
+
+		std::string ret = "{";
 		for (size_t i = 0; i < size; ++i) {
 			ret += _getParameterName(i) + "=";
 			std::visit([&ret](auto&& arg) {
@@ -161,7 +177,9 @@ private:
 				_bestParameters = pp;
 			}
 			_prog++;
-			_progressCallback(this);
+			if (_progressCallback) {
+				_progressCallback(this);
+			}
 			return;
 		}
 
